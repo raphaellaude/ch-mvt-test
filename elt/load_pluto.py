@@ -4,11 +4,8 @@ Streams the source file in batches via pyogrio's numpy-level reader (no
 geopandas dependency), converts each geometry straight into the nested
 list-of-rings structure that maps 1:1 onto ClickHouse's native
 `MultiPolygon` type (Array(Array(Array(Tuple(Float64, Float64))))), and
-inserts in chunks. Also computes, once per row: a bounding box (how
-tile/viewport queries prune rows, since ClickHouse has no spatial index yet)
-and a planar area in square feet (there's no PLUTO LotArea/BldgArea
-attribute in this export, so downstream $/sqft queries divide by this
-instead of recomputing area from geometry on every request).
+inserts in chunks. Also computes a per-row bounding box, which is how
+tile/viewport queries prune rows since ClickHouse has no spatial index yet.
 """
 
 import os
@@ -18,10 +15,8 @@ from pathlib import Path
 
 import clickhouse_connect
 import pyogrio
-import pyproj
 import shapely
 from dotenv import load_dotenv
-from shapely.ops import transform as shapely_transform
 from tqdm import tqdm
 
 load_dotenv()
@@ -33,21 +28,6 @@ CACHE_PATH = Path(__file__).parent / ".data" / "pluto25_shp_wgs.fgb"
 
 TABLE = "pluto_parcels"
 CHUNK_SIZE = 5_000
-
-# The source export has no PLUTO LotArea/BldgArea attribute (checked — not
-# present in the fgb, and not carried through the upstream harmonization
-# pipeline either), so parcel area is computed once here, at load time, by
-# reprojecting into NY State Plane feet (EPSG:2263, PLUTO's usual unit) and
-# taking the planar area. Downstream, av-per-sqft is then just `assesstot /
-# area_sqft` — plain arithmetic on a stored column, not a live geometry
-# recomputation on every tile/aggregate request.
-_TO_STATE_PLANE_FT = pyproj.Transformer.from_crs(
-    "EPSG:4326", "EPSG:2263", always_xy=True
-).transform
-
-
-def area_sqft(geom):
-    return shapely_transform(_TO_STATE_PLANE_FT, geom).area
 
 FIELD_COLUMNS = [
     "landuse",
@@ -62,21 +42,30 @@ FIELD_COLUMNS = [
     "builtfar",
 ]
 
+# lotarea/bldgarea are real PLUTO attributes (not derived from geometry —
+# an earlier version of this script approximated area by reprojecting and
+# measuring the polygon, which was wildly wrong for condo-unit BBLs that
+# share a building footprint geometry but carry a near-zero official lot
+# area). bbl is PLUTO's real unique parcel id.
+EXTRA_COLUMNS = ["bbl", "lotarea", "bldgarea"]
+READ_COLUMNS = FIELD_COLUMNS + EXTRA_COLUMNS
+
 # zonedist_simple / bldgclass_simple are non-nullable LowCardinality(String)
 # columns; OGR returns None for a handful of rows with no value, so those
 # get coerced to '' instead of null.
 NON_NULLABLE_STRING_COLUMNS = {"zonedist_simple", "bldgclass_simple"}
 
 ALL_COLUMNS = (
-    ["id"]
+    ["id", "bbl"]
     + FIELD_COLUMNS
-    + ["geom", "area_sqft", "min_lon", "min_lat", "max_lon", "max_lat"]
+    + ["lotarea", "bldgarea", "geom", "min_lon", "min_lat", "max_lon", "max_lat"]
 )
 
 CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {TABLE}
 (
     id UInt32,
+    bbl UInt64,
     landuse Nullable(Int32),
     zonedist_simple LowCardinality(String),
     assessland Nullable(Float64),
@@ -87,8 +76,9 @@ CREATE TABLE IF NOT EXISTS {TABLE}
     bldgclass_simple LowCardinality(String),
     yearalter1 Nullable(Int32),
     builtfar Nullable(Float64),
+    lotarea Nullable(Int64),
+    bldgarea Nullable(Int64),
     geom MultiPolygon,
-    area_sqft Float64,
     min_lon Float64,
     min_lat Float64,
     max_lon Float64,
@@ -194,9 +184,9 @@ def main():
     with tqdm(total=total, unit="rows") as pbar:
         skip = 0
         while skip < total:
-            _, _, geom_wkb, fields = pyogrio.raw.read(
+            meta, _, geom_wkb, fields = pyogrio.raw.read(
                 fgb_path,
-                columns=FIELD_COLUMNS,
+                columns=READ_COLUMNS,
                 skip_features=skip,
                 max_features=CHUNK_SIZE,
                 force_2d=True,
@@ -205,7 +195,10 @@ def main():
             if n == 0:
                 break
 
-            field_cols = dict(zip(FIELD_COLUMNS, fields))
+            # pyogrio returns fields in the source's own column order, not
+            # the order `columns` was requested in — zip against the actual
+            # returned order (meta["fields"]), not READ_COLUMNS.
+            field_cols = dict(zip(meta["fields"], fields))
             rows = []
             for i in range(n):
                 geom = shapely.from_wkb(geom_wkb[i])
@@ -218,13 +211,22 @@ def main():
                     continue
 
                 min_lon, min_lat, max_lon, max_lat = geom.bounds
-                row = [next_id]
+                bbl = clean(field_cols["bbl"][i])
+                row = [next_id, int(bbl) if bbl is not None else 0]
                 for col in FIELD_COLUMNS:
                     value = clean(field_cols[col][i])
                     if value is None and col in NON_NULLABLE_STRING_COLUMNS:
                         value = ""
                     row.append(value)
-                row += [multipolygon, area_sqft(geom), min_lon, min_lat, max_lon, max_lat]
+                row += [
+                    clean(field_cols["lotarea"][i]),
+                    clean(field_cols["bldgarea"][i]),
+                    multipolygon,
+                    min_lon,
+                    min_lat,
+                    max_lon,
+                    max_lat,
+                ]
                 rows.append(row)
                 next_id += 1
 

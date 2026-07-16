@@ -33,7 +33,7 @@ curl -s --user 'default:clickhouse' --data-binary \
   "SELECT name FROM system.functions WHERE name ILIKE '%MVT%'" http://localhost:8123
 # should list MVTEncode, MVTEncodeGeom, MVTBoundingBox, MVTBoundingBoxMercator
 
-# 2. Load the parcels (~60s for 856k rows; downloads a public ~260MB fgb on first run)
+# 2. Load the parcels (~60s for 856k rows; downloads a public ~275MB fgb on first run)
 cd elt
 cp .env.example .env   # defaults already match the local ClickHouse above
 uv run python3 load_pluto.py
@@ -56,14 +56,19 @@ pnpm dev                 # http://localhost:5173
   `pyogrio.raw.read` (no geopandas), converts each geometry directly into the
   nested list structure that matches ClickHouse's native `MultiPolygon` type
   (`Array(Array(Array(Tuple(Float64, Float64))))`) — no WKB/WKT round trip —
-  and computes, once per row, a bounding box (since ClickHouse has no spatial
-  index yet, viewport/tile queries prune on this instead) and a planar area
-  in square feet (`area_sqft`, reprojected into NY State Plane feet — the
-  export has no PLUTO `LotArea`/`BldgArea` attribute, so this stands in for
-  it, computed once at load time rather than from geometry on every query).
-  `pluto_parcels` is `ORDER BY (min_lon, min_lat)` with `minmax` skip indexes
-  on `max_lon`/`max_lat`, so every viewport/tile query's four-sided
-  bbox-overlap filter can skip most granules.
+  and computes a bounding box per row (since ClickHouse has no spatial index
+  yet, viewport/tile queries prune on this instead). `pluto_parcels` is
+  `ORDER BY (min_lon, min_lat)` with `minmax` skip indexes on
+  `max_lon`/`max_lat`, so every viewport/tile query's four-sided
+  bbox-overlap filter can skip most granules. Fields loaded include real
+  PLUTO attributes (`bbl`, `lotarea`, `bldgarea`) alongside the harmonized
+  set (`zonedist_simple`, `bldgclass_simple`, etc.) — the public fgb is a
+  DuckDB join of two upstream exports (harmonized attributes reprojected to
+  WGS84 for the geometry, the fuller raw PLUTO attribute set for `lotarea`
+  and friends), matched by row order and spot-checked by centroid distance
+  before trusting it; an earlier version of this script tried to
+  approximate lot area from geometry instead, which was wildly wrong for
+  condo-unit BBLs that share a building footprint with other units.
 
 - **`api/`** has zero third-party dependencies. It doesn't build SQL from
   request input — it holds three fixed query strings (`queries.go`) and binds
@@ -74,8 +79,11 @@ pnpm dev                 # http://localhost:5173
   `FORMAT JSON` and pass the response straight through, so there's no
   server-side JSON re-marshaling. `/aggregates` also returns
   `value_breaks` — the 20th/40th/60th/80th percentiles of assessed value per
-  square foot within the current viewport, recomputed by ClickHouse on every
-  request.
+  square foot (`assesstot / lotarea`) within the current viewport,
+  recomputed by ClickHouse on every request (verified against a manual
+  bucket count — each bucket lands at ~20% of parcels, as expected of a
+  quantile split; a "mostly one color" viewport is large buildings
+  naturally covering more screen area, not a skewed split).
 
 - **`app/`** renders the tiles with MapLibre GL (no basemap yet, per the
   brief — just the parcels on a solid background), choropleth-colored by

@@ -6,15 +6,15 @@ export const VALUE_COLORS = ["#ffffcc", "#c2e699", "#78c679", "#31a354", "#00683
 // Sane default ($/sqft) until the first live /aggregates response arrives.
 export const DEFAULT_VALUE_BREAKS: [number, number, number, number] = [50, 120, 250, 500];
 
-// assesstot / area_sqft as a MapLibre expression — area_sqft is precomputed
-// once at ELT time (see elt/load_pluto.py), not recomputed from geometry
-// here, so this is just cheap paint-time arithmetic on two stored numbers.
-// Using $/sqft rather than raw assessed value keeps a handful of huge
-// parcels from dominating the color scale.
+// assesstot / lotarea as a MapLibre expression — lotarea is a real PLUTO
+// attribute loaded straight from the source data (see elt/load_pluto.py),
+// not derived from geometry, so this is just cheap paint-time arithmetic on
+// two stored numbers. Using $/sqft rather than raw assessed value keeps a
+// handful of huge parcels from dominating the color scale.
 const AV_PER_SQFT_EXPR = [
   "/",
   ["coalesce", ["get", "assesstot"], 0],
-  ["max", ["coalesce", ["get", "area_sqft"], 1], 1],
+  ["max", ["coalesce", ["get", "lotarea"], 1], 1],
 ];
 
 // MapLibre's `step` expression: [step, input, output0, stop1, output1, stop2, output2, ...]

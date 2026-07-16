@@ -85,8 +85,8 @@ export default function MapView({ onMoveEnd, onZoomChange, valueBreaks }: MapVie
         if (!feature) return;
         const p = feature.properties as Record<string, unknown>;
         const assessed = Number(p.assesstot ?? 0);
-        const areaSqft = Number(p.area_sqft ?? 0);
-        const perSqft = areaSqft > 0 ? assessed / areaSqft : null;
+        const lotarea = Number(p.lotarea ?? 0);
+        const perSqft = lotarea > 0 ? assessed / lotarea : null;
         popup
           .setLngLat(e.lngLat)
           .setHTML(

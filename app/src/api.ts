@@ -11,8 +11,8 @@ export interface Aggregates {
   avg_built_far: number | null;
   total_assessed_value: number | null;
   // 20th/40th/60th/80th percentiles of assessed value per square foot
-  // (assesstot / area_sqft) within the current viewport, recomputed on
-  // every request.
+  // (assesstot / lotarea, PLUTO's real lot-area attribute) within the
+  // current viewport, recomputed on every request.
   value_breaks: [number, number, number, number];
 }
 
@@ -27,7 +27,7 @@ export interface Parcel {
   assessland: number | null;
   assesstot: number | null;
   builtfar: number | null;
-  area_sqft: number | null;
+  lotarea: number | null;
   av_per_sqft: number | null;
 }
 

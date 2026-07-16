@@ -6,16 +6,12 @@ export const VALUE_COLORS = ["#ffffcc", "#c2e699", "#78c679", "#31a354", "#00683
 // Sane default ($/sqft) until the first live /aggregates response arrives.
 export const DEFAULT_VALUE_BREAKS: [number, number, number, number] = [50, 120, 250, 500];
 
-// assesstot / lotarea as a MapLibre expression — lotarea is a real PLUTO
-// attribute loaded straight from the source data (see elt/load_pluto.py),
-// not derived from geometry, so this is just cheap paint-time arithmetic on
-// two stored numbers. Using $/sqft rather than raw assessed value keeps a
-// handful of huge parcels from dominating the color scale.
-const AV_PER_SQFT_EXPR = [
-  "/",
-  ["coalesce", ["get", "assesstot"], 0],
-  ["max", ["coalesce", ["get", "lotarea"], 1], 1],
-];
+// av_per_sqft (assesstot / lotarea) is computed once in ClickHouse and
+// baked into the tile as a real feature property (see api/queries.go), not
+// recomputed here — one source of truth for the value actually driving the
+// map's color. Using $/sqft rather than raw assessed value keeps a handful
+// of huge parcels from dominating the color scale.
+const AV_PER_SQFT_EXPR = ["coalesce", ["get", "av_per_sqft"], 0];
 
 // MapLibre's `step` expression: [step, input, output0, stop1, output1, stop2, output2, ...]
 // Breaks must be strictly increasing, or MapLibre throws — quantiles from a

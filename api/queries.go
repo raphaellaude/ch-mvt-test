@@ -6,22 +6,25 @@ package main
 // `{name:Type}` HTTP parameters (see clickhouse.go), so a request can only
 // ever change the parameter values, never the query shape.
 
-// lotarea is a real PLUTO attribute (not derived from geometry — see
-// elt/load_pluto.py) included in every tile feature's properties so the map
-// can compute assessed-value-per-sqft client-side (cheap MapLibre paint-time
-// arithmetic on two stored numbers) instead of ClickHouse dividing on every
-// request.
+// av_per_sqft (assesstot / lotarea, PLUTO's real lot-area attribute — see
+// elt/load_pluto.py) is computed here in ClickHouse and baked into the tile
+// as a real feature property, rather than recomputed client-side from raw
+// assesstot/lotarea on every paint — one source of truth for the value
+// that's actually driving the map's color, which also makes it directly
+// inspectable per-feature (e.g. in the hover popup) instead of trusting a
+// separate client-side computation to match.
 const tileQuery = `
 WITH 1 AS buffer, 4096 AS extent,
      MVTBoundingBox({z:UInt8}, {x:UInt32}, {y:UInt32}, buffer / extent) AS bb
 SELECT MVTEncode('parcels')(
     MVTEncodeGeom(geom, {z:UInt8}, {x:UInt32}, {y:UInt32}, extent, buffer),
     tuple(id, landuse, zonedist_simple, assessland, assesstot, numfloors, yearbuilt,
-          unitsres, bldgclass_simple, yearalter1, builtfar, lotarea)
+          unitsres, bldgclass_simple, yearalter1, builtfar, lotarea,
+          round(assesstot / nullif(lotarea, 0), 2))
       ::Tuple(id UInt32, landuse Nullable(Int32), zonedist_simple String, assessland Nullable(Float64),
                assesstot Nullable(Float64), numfloors Nullable(Float64), yearbuilt Nullable(Int32),
                unitsres Nullable(Int64), bldgclass_simple String, yearalter1 Nullable(Int32), builtfar Nullable(Float64),
-               lotarea Nullable(Int64))
+               lotarea Nullable(Int64), av_per_sqft Nullable(Float64))
 )
 FROM pluto_parcels
 WHERE min_lon <= bb.3 AND max_lon >= bb.1 AND min_lat <= bb.4 AND max_lat >= bb.2

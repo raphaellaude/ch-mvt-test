@@ -42,7 +42,7 @@
 .app-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: 1fr 460px;
   min-height: 0;
 }
 

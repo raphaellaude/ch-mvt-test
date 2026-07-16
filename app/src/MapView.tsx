@@ -86,15 +86,20 @@ export default function MapView({ onMoveEnd, onZoomChange, valueBreaks }: MapVie
         const p = feature.properties as Record<string, unknown>;
         const assessed = Number(p.assesstot ?? 0);
         const lotarea = Number(p.lotarea ?? 0);
-        const perSqft = lotarea > 0 ? assessed / lotarea : null;
+        // av_per_sqft comes straight from the tile — computed once in
+        // ClickHouse (see api/queries.go), not recomputed here — so this
+        // is exactly the value driving the fill color, not a client-side
+        // approximation of it.
+        const perSqft = p.av_per_sqft != null ? Number(p.av_per_sqft) : null;
         popup
           .setLngLat(e.lngLat)
           .setHTML(
             `<div class="parcel-popup">
-              <strong>Bldg class ${p.bldgclass_simple || "—"}</strong><br/>
+              <strong>Bldg class ${p.bldgclass_simple || "—"}</strong> · id ${p.id ?? "—"}<br/>
               Zoning: ${p.zonedist_simple || "—"}<br/>
               Floors: ${p.numfloors ?? "—"} · Built ${p.yearbuilt || "—"}<br/>
-              Assessed: $${assessed.toLocaleString()}${perSqft !== null ? ` ($${perSqft.toFixed(0)}/sqft)` : ""}
+              Assessed: $${assessed.toLocaleString()} · Lot area: ${lotarea > 0 ? `${lotarea.toLocaleString()} sqft` : "—"}<br/>
+              <strong>AV/sqft: ${perSqft !== null ? `$${perSqft.toFixed(2)}` : "—"}</strong>
             </div>`,
           )
           .addTo(map);

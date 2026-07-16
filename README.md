@@ -75,14 +75,18 @@ pnpm dev                 # http://localhost:5173
   every request value (tile `z/x/y`, viewport bbox) through ClickHouse's
   native HTTP `{name:Type}` parameters. `/tile/{z}/{x}/{y}` calls
   `MVTEncode`/`MVTEncodeGeom`/`MVTBoundingBox` and streams back the raw
-  protobuf tile; `/aggregates` and `/top-parcels` ask ClickHouse for
-  `FORMAT JSON` and pass the response straight through, so there's no
-  server-side JSON re-marshaling. `/aggregates` also returns
-  `value_breaks` — the 20th/40th/60th/80th percentiles of assessed value per
-  square foot (`assesstot / lotarea`) within the current viewport,
-  recomputed by ClickHouse on every request (verified against a manual
-  bucket count — each bucket lands at ~20% of parcels, as expected of a
-  quantile split; a "mostly one color" viewport is large buildings
+  protobuf tile — each feature's properties include `av_per_sqft`
+  (`assesstot / lotarea`), computed once in ClickHouse and baked straight
+  into the tile rather than recomputed client-side, so the value driving
+  the map's color is directly inspectable per-feature (e.g. via the hover
+  popup) instead of trusting a separate client-side calculation to match
+  it. `/aggregates` and `/top-parcels` ask ClickHouse for `FORMAT JSON` and
+  pass the response straight through, so there's no server-side JSON
+  re-marshaling. `/aggregates` also returns `value_breaks` — the
+  20th/40th/60th/80th percentiles of `av_per_sqft` within the current
+  viewport, recomputed by ClickHouse on every request (verified against a
+  manual bucket count — each bucket lands at ~20% of parcels, as expected
+  of a quantile split; a "mostly one color" viewport is large buildings
   naturally covering more screen area, not a skewed split).
 
 - **`app/`** renders the tiles with MapLibre GL (no basemap yet, per the

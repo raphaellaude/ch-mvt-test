@@ -1,0 +1,27 @@
+# env
+.env
+*.env
+!.env.example
+
+# python
+elt/.venv/
+elt/__pycache__/
+elt/.data/
+**/__pycache__/
+*.pyc
+
+# go
+api/api
+api/tmp/
+
+# node
+app/node_modules/
+app/dist/
+app/.vite/
+
+# cloudflare
+.wrangler/
+
+# misc
+*.mvt
+.DS_Store

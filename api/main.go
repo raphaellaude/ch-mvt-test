@@ -63,7 +63,13 @@ func handleTile(ch *ClickHouse) http.HandlerFunc {
 		defer resp.Body.Close()
 
 		w.Header().Set("Content-Type", "application/vnd.mapbox-vector-tile")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		// Short TTL deliberately: the tile URL doesn't change when the SQL
+		// backing it does, so a long max-age here means browsers keep
+		// serving pre-schema-change tile bytes (missing/renamed properties)
+		// for up to that long after a deploy — bit us once already (a
+		// stale-cached tile silently missing av_per_sqft rendered as if the
+		// value were null). Revisit if this becomes a real traffic concern.
+		w.Header().Set("Cache-Control", "public, max-age=60")
 		io.Copy(w, resp.Body)
 	}
 }

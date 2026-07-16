@@ -45,6 +45,12 @@ export default function MapView({ onMoveEnd, onZoomChange, valueBreaks }: MapVie
       maxBounds: NYC_BOUNDS,
     });
     mapRef.current = map;
+    if (import.meta.env.DEV) {
+      // Handy for inspecting live tile properties from the console/devtools
+      // when debugging rendering issues, e.g.:
+      //   __map.querySourceFeatures('parcels', { sourceLayer: 'parcels' })
+      (window as unknown as { __map?: MapLibreMap }).__map = map;
+    }
 
     map.on("load", () => {
       map.addSource("parcels", {

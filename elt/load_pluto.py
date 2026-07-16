@@ -150,7 +150,10 @@ def resolve_fgb_path() -> str:
     print(f"no local PLUTO_FGB_PATH, downloading from {url}", file=sys.stderr)
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = CACHE_PATH.with_suffix(".tmp")
-    with urllib.request.urlopen(url) as response:
+    # R2's r2.dev public URLs sit behind Cloudflare's bot protection, which
+    # 403s urllib's default "Python-urllib/x.y" User-Agent.
+    request = urllib.request.Request(url, headers={"User-Agent": "ch-mvt-test-elt"})
+    with urllib.request.urlopen(request) as response:
         total = int(response.headers.get("Content-Length", 0))
         with (
             open(tmp_path, "wb") as f,

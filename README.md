@@ -75,7 +75,12 @@ pnpm dev                 # http://localhost:5173
   every request value (tile `z/x/y`, viewport bbox) through ClickHouse's
   native HTTP `{name:Type}` parameters. `/tile/{z}/{x}/{y}` calls
   `MVTEncode`/`MVTEncodeGeom`/`MVTBoundingBox` and streams back the raw
-  protobuf tile — each feature's properties include `av_per_sqft`
+  protobuf tile, clipped with a 64-unit buffer (of the 4096 extent;
+  `TILE_BUFFER` in `api/.env`) so polygons that cross a tile edge are cut
+  well outside the visible tile instead of right on the seam, where the
+  outline layer would otherwise draw the cut as a line. The same buffer is
+  passed to `MVTBoundingBox` as its margin so the bbox prefilter also picks
+  up parcels sitting just past the edge. Each feature's properties include `av_per_sqft`
   (`assesstot / lotarea`), computed once in ClickHouse and baked straight
   into the tile rather than recomputed client-side, so the value driving
   the map's color is directly inspectable per-feature (e.g. via the hover

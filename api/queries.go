@@ -13,8 +13,15 @@ package main
 // that's actually driving the map's color, which also makes it directly
 // inspectable per-feature (e.g. in the hover popup) instead of trusting a
 // separate client-side computation to match.
+//
+// {buffer:UInt32} is the tile buffer in extent units (see Config.TileBuffer):
+// MVTEncodeGeom clips each geometry to the tile expanded by that many pixels
+// on every side, and MVTBoundingBox's margin is set to the same fraction so
+// the bbox prefilter also picks up parcels that sit just past the tile edge
+// but inside the buffer. ClickHouse's default of 1 puts the clip edge right
+// on the tile seam, where the outline layer draws it as a visible line.
 const tileQuery = `
-WITH 1 AS buffer, 4096 AS extent,
+WITH {buffer:UInt32} AS buffer, 4096 AS extent,
      MVTBoundingBox({z:UInt8}, {x:UInt32}, {y:UInt32}, buffer / extent) AS bb
 SELECT MVTEncode('parcels')(
     MVTEncodeGeom(geom, {z:UInt8}, {x:UInt32}, {y:UInt32}, extent, buffer),

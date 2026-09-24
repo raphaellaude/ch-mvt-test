@@ -3,9 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -16,7 +14,6 @@ type Config struct {
 	ClickHouseDatabase string
 	Port               string
 	AllowedOrigin      string
-	TileBuffer         int // MVT clip buffer in extent units (tile extent is 4096)
 }
 
 // loadEnvFile does a best-effort, dependency-free ".env" load: it only sets
@@ -64,14 +61,6 @@ func loadConfig() Config {
 	host := getEnv("CLICKHOUSE_HOST", "localhost")
 	port := getEnv("CLICKHOUSE_PORT", "8123")
 
-	// 64/4096 (= 4px on a 256px tile) is the common vector-tile default:
-	// enough that clipped polygon edges and line joins land well outside the
-	// visible tile, without shipping much duplicate geometry per tile.
-	tileBuffer, err := strconv.Atoi(getEnv("TILE_BUFFER", "64"))
-	if err != nil || tileBuffer < 0 || tileBuffer > 4096 {
-		log.Fatalf("TILE_BUFFER must be an integer in [0, 4096], got %q", os.Getenv("TILE_BUFFER"))
-	}
-
 	return Config{
 		ClickHouseURL:      fmt.Sprintf("%s://%s:%s", scheme, host, port),
 		ClickHouseUser:     getEnv("CLICKHOUSE_USER", "default"),
@@ -79,6 +68,5 @@ func loadConfig() Config {
 		ClickHouseDatabase: getEnv("CLICKHOUSE_DATABASE", "default"),
 		Port:               getEnv("PORT", "8080"),
 		AllowedOrigin:      getEnv("ALLOWED_ORIGIN", "http://localhost:5173"),
-		TileBuffer:         tileBuffer,
 	}
 }

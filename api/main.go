@@ -17,7 +17,7 @@ func main() {
 	ch := NewClickHouse(cfg)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /tile/{z}/{x}/{y}", handleTile(ch, cfg.TileBuffer))
+	mux.HandleFunc("GET /tile/{z}/{x}/{y}", handleTile(ch))
 	mux.HandleFunc("GET /aggregates", handleAggregates(ch))
 	mux.HandleFunc("GET /top-parcels", handleTopParcels(ch))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +33,7 @@ func main() {
 }
 
 // handleTile serves GET /tile/{z}/{x}/{y} as a Mapbox Vector Tile.
-func handleTile(ch *ClickHouse, buffer int) http.HandlerFunc {
+func handleTile(ch *ClickHouse) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		z, zErr := strconv.Atoi(r.PathValue("z"))
 		x, xErr := strconv.Atoi(r.PathValue("x"))
@@ -49,10 +49,9 @@ func handleTile(ch *ClickHouse, buffer int) http.HandlerFunc {
 		}
 
 		params := map[string]string{
-			"z":      strconv.Itoa(z),
-			"x":      strconv.Itoa(x),
-			"y":      strconv.Itoa(y),
-			"buffer": strconv.Itoa(buffer),
+			"z": strconv.Itoa(z),
+			"x": strconv.Itoa(x),
+			"y": strconv.Itoa(y),
 		}
 
 		resp, err := ch.Query(r.Context(), tileQuery, params)
